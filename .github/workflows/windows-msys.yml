@@ -1,63 +1,42 @@
-name: Windows MSYS
+name: Build Webcamoid (Windows)
 
-on: [push, pull_request]
-
-env:
-  NJOBS: 4
+on:
+  workflow_dispatch:  # lets you trigger manually
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    strategy:
-      max-parallel: 10
-      fail-fast: false
-      matrix:
-       include:
-         - target_arch: x86_64
-           compiler: gcc
-           upload: 1
-         - target_arch: x86_64
-           compiler: clang
-           upload: 0
-    env:
-      TARGET_ARCH: ${{ matrix.target_arch }}
-      COMPILER: ${{ matrix.compiler }}
-      UPLOAD: ${{ matrix.upload }}
+
     steps:
-    - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - uses: msys2/setup-msys2@v2
-      with:
-        update: true
-        install: >-
-          ccache
-          clang
-          cmake
-          git
-          make
-          pkgconf
-          python3
-          mingw-w64-${{ matrix.target_arch }}-binutils
-          mingw-w64-${{ matrix.target_arch }}-ccache
-          mingw-w64-${{ matrix.target_arch }}-clang
-          mingw-w64-${{ matrix.target_arch }}-cmake
-          mingw-w64-${{ matrix.target_arch }}-ffmpeg
-          mingw-w64-${{ matrix.target_arch }}-pkgconf
-          mingw-w64-${{ matrix.target_arch }}-qt6
-          mingw-w64-${{ matrix.target_arch }}-vlc
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
 
-    - name: Build
-      run: ./ports/ci/windows-msys/build.sh
+      - name: Install Qt (5.15.2)
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 5.15.2
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
 
-    - name: Deploy
-      run: ./ports/ci/windows-msys/deploy.sh
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v3
 
-    # Upload build artifacts so you can download
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: webcamoid-windows-build-${{ matrix.target_arch }}-${{ matrix.compiler }}
-        path: webcamoid-packages/windows/*
+      - name: Configure CMake
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcamoid-windows
+          path: build/bin/**
